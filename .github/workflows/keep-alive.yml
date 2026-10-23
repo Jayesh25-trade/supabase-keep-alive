@@ -1,0 +1,44 @@
+name: Supabase Keep Alive 24/7
+
+on:
+  schedule:
+    # Runs every 6 hours (00:15, 06:15, 12:15, 18:15 UTC)
+    - cron: '15 */6 * * *'
+  workflow_dispatch: # Allows manual trigger anytime from GitHub UI
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase PostgreSQL Database (Read-Only Activity)
+        env:
+          SUPABASE_URL: "https://zbitrovyxadazpkfysas.supabase.co"
+          SUPABASE_ANON_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpiaXRyb3Z5eGFkYXpwa2Z5c2FzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODAxMjA0NjQsImV4cCI6MjA5NTY5NjQ2NH0.6voV594ZPcE3UVqNmrPhuCk_m2h0DSZtKQUCumBenK8"
+        run: |
+          echo "=================================================="
+          echo "Timestamp: $(date -u)"
+          echo "Pinging Supabase Postgres Database via PostgREST..."
+          echo "=================================================="
+
+          # 1. Read-only database query (SELECT id FROM agencies LIMIT 1)
+          # Registers real Postgres compute activity; 0 user data modified!
+          DB_HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/rest/v1/agencies?select=id&limit=1")
+
+          echo "Database REST Query Status Code: $DB_HTTP_STATUS"
+
+          # 2. Auth service health check ping
+          AUTH_HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            "$SUPABASE_URL/auth/v1/health")
+
+          echo "Auth Service Health Status Code: $AUTH_HTTP_STATUS"
+
+          if [ "$DB_HTTP_STATUS" -ge 200 ] && [ "$DB_HTTP_STATUS" -lt 400 ]; then
+            echo "SUCCESS: Supabase database pinged successfully (Read-only, no data changed). Database active!"
+          else
+            echo "ERROR: Received unexpected DB status code $DB_HTTP_STATUS"
+            exit 1
+          fi
